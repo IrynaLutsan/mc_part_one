@@ -4,19 +4,16 @@
 #include <WebSocketsServer.h> 
 #include <WebServer.h>
 
-extern bool leds_busy; 
-extern void blink_leds(void);
+extern void start_led_animation(void);
 
 WebServer server(80);
-WebSocketsServer webSocket = WebSocketsServer(81);
+WebSocketsServer webSocket(81); //= WebSocketsServer(81);
 
 void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
   if (type == WStype_TEXT) {
     if (String((char*)payload) == "START") {
-      if (!leds_busy) {
-        Serial.println("Web Button: clicked"); 
-        blink_leds(); 
-      }
+      Serial.println("Web Button: clicked"); 
+      start_led_animation();
     }
   }
 }
