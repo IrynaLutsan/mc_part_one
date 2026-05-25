@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Станція моніторингу опадів ESP32</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes pulse-slow {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.8; transform: scale(1.03); }
+        }
+        .animate-pulse-slow {
+            animation: pulse-slow 3s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col justify-between font-sans">
+
+    <header class="bg-slate-800 border-b border-slate-700 py-5 px-6 shadow-lg">
+        <div class="max-w-4xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <svg class="w-8 h-8 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19v2m-4-2v1m8-1v1"></path>
+                </svg>
+                <h1 class="text-xl font-bold tracking-wide">IoT Станція Дощу</h1>
+            </div>
+            <div id="connection-badge" class="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+                З'єднано з ESP32
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-4xl w-full mx-auto px-4 py-8 flex-grow flex flex-col justify-center">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+            
+            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl flex flex-col justify-between">
+                <div>
+                    <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-2">Поточний стан</h2>
+                    <div id="rain-status" class="text-3xl font-black text-sky-400 mb-4 transition-all duration-300">
+                        Оновлення...
+                    </div>
+                </div>
+                
+                <div class="relative h-32 w-full bg-slate-950/60 rounded-xl overflow-hidden border border-slate-800 flex items-center justify-center">
+                    <div id="status-emoji" class="text-6xl z-10 filter drop-shadow">☀️</div>
+                    <div id="rain-waves" class="absolute inset-0 bg-sky-500/10 transition-all duration-500" style="height: 0%"></div>
+                </div>
+            </div>
+
+            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl flex flex-col justify-between">
+                <div>
+                    <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-4">Показники датчика</h2>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <div class="flex justify-between text-sm mb-1">
+                                <span class="text-slate-300">Інтенсивність опадів</span>
+                                <span id="intensity-val" class="font-bold text-sky-400">0%</span>
+                            </div>
+                            <div class="w-full bg-slate-700 rounded-full h-3 overflow-hidden">
+                                <div id="intensity-bar" class="bg-sky-500 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-between items-center py-2 border-t border-slate-700/50">
+                            <span class="text-sm text-slate-400">Аналоговий сигнал (ADC)</span>
+                            <span id="adc-val" class="font-mono bg-slate-900 px-2.5 py-1 rounded text-sm text-slate-300">4095</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 mt-6">
+                    <a href="/log.csv" download class="flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-white font-medium py-2.5 px-4 rounded-xl transition duration-200 text-sm">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        Скачати .CSV
+                    </a>
+                    <a href="/log.csv" target="_blank" class="flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-500 text-white font-medium py-2.5 px-4 rounded-xl transition duration-200 text-sm">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                        </svg>
+                        Переглянути лог
+                    </a>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <footer class="bg-slate-950 py-4 px-6 text-center text-xs text-slate-500 border-t border-slate-800">
+        <div class="max-w-4xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-2">
+            <p>ESP32-WROOM-32D • Лабораторна робота №3</p>
+            <p id="last-update" class="font-mono text-slate-400">Останнє оновлення: ніколи</p>
+        </div>
+    </footer>
+
+    <script>
+        const statusText = document.getElementById('rain-status');
+        const statusEmoji = document.getElementById('status-emoji');
+        const rainWaves = document.getElementById('rain-waves');
+        const intensityVal = document.getElementById('intensity-val');
+        const intensityBar = document.getElementById('intensity-bar');
+        const adcVal = document.getElementById('adc-val');
+        const badge = document.getElementById('connection-badge');
+        const lastUpdateText = document.getElementById('last-update');
+
+        async function updateDashboard() {
+            try {
+                const response = await fetch('/api/data');
+                if (!response.ok) throw new Error('Помилка сервера');
+                
+                const data = await response.json();
+
+                adcVal.textContent = data.value;
+                
+                let percentage = Math.round(((4095 - data.value) / 4095) * 100);
+                if (percentage < 0) percentage = 0;
+                if (percentage > 100) percentage = 100;
+
+                intensityVal.textContent = percentage + '%';
+                intensityBar.style.width = percentage + '%';
+                rainWaves.style.height = percentage + '%';
+
+                if (percentage < 15) {
+                    statusText.textContent = "Сухо";
+                    statusText.className = "text-3xl font-black text-amber-400 transition-all duration-300";
+                    statusEmoji.textContent = "☀️";
+                    rainWaves.className = "absolute inset-0 bg-amber-500/5 transition-all duration-500";
+                } else if (percentage >= 15 && percentage <= 60) {
+                    statusText.textContent = "Йде легкий дощ";
+                    statusText.className = "text-3xl font-black text-sky-400 transition-all duration-300";
+                    statusEmoji.textContent = "🌧️";
+                    rainWaves.className = "absolute inset-0 bg-sky-500/20 transition-all duration-500 animate-pulse-slow";
+                } else {
+                    statusText.textContent = "Сильна злива!";
+                    statusText.className = "text-3xl font-black text-blue-500 transition-all duration-300";
+                    statusEmoji.textContent = "⛈️";
+                    rainWaves.className = "absolute inset-0 bg-blue-600/40 transition-all duration-500 animate-pulse";
+                }
+
+                badge.className = "px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5";
+                badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>З'єднано з ESP32`;
+
+                const now = new Date();
+                lastUpdateText.textContent = `Оновлено о: ${now.toLocaleTimeString()}`;
+
+            } catch (error) {
+                console.error('Помилка отримання даних:', error);
+                badge.className = "px-3 py-1 rounded-full text-xs font-semibold bg-red-500/20 text-red-400 border border-red-500/30 flex items-center gap-1.5";
+                badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-red-400"></span>Помилка зв'язку`;
+                statusText.textContent = "Немає зв'язку";
+                statusText.className = "text-3xl font-black text-red-400";
+                statusEmoji.textContent = "🔌";
+            }
+        }
+
+        setInterval(updateDashboard, 1500);
+        updateDashboard();
+    </script>
+</body>
+</html>
